@@ -31,6 +31,12 @@ async function initEngine() {
   try {
     engine = new PdfTeXEngine();
     await engine.loadEngine();
+
+    // Bangun format file (.fmt) sekali di awal, sebelum compile pertama.
+    // Tanpa ini engine akan gagal dengan "can't find the format file".
+    setStatus('loading', 'menyiapkan format engine…');
+    await engine.compileFormat();
+
     setStatus('ok', 'mesin siap');
     compileBtn.disabled = false;
   } catch (err) {
