@@ -1,1 +1,285 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>galley — render LaTeX ke PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink: #eae7dd;
+    --ink-dim: #9a9a92;
+    --bg: #121316;
+    --panel: #191b1f;
+    --panel-2: #1f2126;
+    --line: #2b2e34;
+    --amber: #e8a33d;
+    --amber-dim: #7a5a24;
+    --red: #d9634a;
+    --ok: #7cae6f;
+    --radius: 3px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    display:flex;
+    flex-direction:column;
+  }
 
+  /* ---------- header ---------- */
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding:18px 24px 14px;
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{
+    color:var(--amber);
+    font-weight:700;
+    font-size:20px;
+    letter-spacing:0.5px;
+  }
+  .brand .sub{
+    color:var(--ink-dim);
+    font-size:12px;
+    letter-spacing:0.5px;
+  }
+  .status-line{
+    font-size:12px;
+    color:var(--ink-dim);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .status-dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--ink-dim);
+    transition:background .2s;
+  }
+  .status-dot.loading{ background:var(--amber); animation:pulse 1s infinite ease-in-out; }
+  .status-dot.ok{ background:var(--ok); }
+  .status-dot.err{ background:var(--red); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  /* ---------- main layout ---------- */
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    min-height:0;
+  }
+  @media (max-width: 860px){
+    main{ grid-template-columns: 1fr; }
+  }
+
+  .pane{
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    border-right:1px solid var(--line);
+  }
+  .pane:last-child{ border-right:none; }
+
+  .pane-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:10px 16px;
+    border-bottom:1px solid var(--line);
+    background:var(--panel);
+    font-size:11px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--ink-dim);
+  }
+
+  textarea#source{
+    flex:1;
+    resize:none;
+    border:none;
+    outline:none;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'JetBrains Mono', ui-monospace, monospace;
+    font-size:13.5px;
+    line-height:1.55;
+    padding:18px 20px;
+    tab-size:2;
+  }
+
+  .preview-wrap{
+    flex:1;
+    min-height:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 27px, #ffffff06 27px, #ffffff06 28px),
+      var(--panel-2);
+    position:relative;
+  }
+  .preview-wrap iframe{
+    width:100%; height:100%; border:none; background:#fff;
+    display:none;
+  }
+  .empty-state{
+    color:var(--ink-dim);
+    font-size:12.5px;
+    text-align:center;
+    max-width:280px;
+    line-height:1.6;
+  }
+  .empty-state .glyph{ font-size:26px; color:var(--amber-dim); display:block; margin-bottom:10px; }
+
+  /* ---------- footer / controls ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    padding:14px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    background:var(--panel);
+  }
+  .log-toggle{
+    font-size:11.5px;
+    color:var(--ink-dim);
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:3px;
+  }
+  .actions{ display:flex; gap:10px; align-items:center; }
+
+  button{
+    font-family:inherit;
+    font-size:13px;
+    cursor:pointer;
+    border-radius:var(--radius);
+    padding:10px 18px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--ink);
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  button:hover:not(:disabled){ border-color:var(--amber-dim); color:#fff; }
+  button:disabled{ opacity:.4; cursor:default; }
+
+  #compileBtn{
+    background:var(--amber);
+    border-color:var(--amber);
+    color:#1a1305;
+    font-weight:700;
+    letter-spacing:.3px;
+  }
+  #compileBtn:hover:not(:disabled){ background:#f2b04f; border-color:#f2b04f; color:#1a1305; }
+
+  /* ticket-style download button */
+  #downloadBtn{
+    position:relative;
+    display:none;
+    align-items:center;
+    gap:8px;
+    background:var(--panel-2);
+    border:1px dashed var(--amber-dim);
+    color:var(--amber);
+  }
+  #downloadBtn:hover{ border-color:var(--amber); color:#fff; }
+  #downloadBtn::before, #downloadBtn::after{
+    content:"";
+    position:absolute;
+    width:10px; height:10px;
+    background:var(--panel);
+    border-radius:50%;
+    top:50%; transform:translateY(-50%);
+  }
+  #downloadBtn::before{ left:-5px; border-right:1px dashed var(--amber-dim); }
+  #downloadBtn::after{ right:-5px; border-left:1px dashed var(--amber-dim); }
+
+  #logPanel{
+    display:none;
+    grid-column:1 / -1;
+    max-height:160px;
+    overflow:auto;
+    background:#0d0e10;
+    color:#8f9a8a;
+    font-size:11.5px;
+    line-height:1.5;
+    padding:12px 20px;
+    border-top:1px solid var(--line);
+    white-space:pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="mark">galley</span>
+    <span class="sub">render LaTeX → PDF, langsung di browser</span>
+  </div>
+  <div class="status-line">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">memuat mesin kompilasi…</span>
+  </div>
+</header>
+
+<main>
+  <section class="pane">
+    <div class="pane-head"><span>source.tex</span></div>
+    <textarea id="source" spellcheck="false">\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
+\title{Contoh Dokumen}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+Halo, ini contoh render LaTeX langsung dari browser.
+
+\[
+  a^2 + b^2 = c^2
+\]
+
+\end{document}
+</textarea>
+  </section>
+
+  <section class="pane">
+    <div class="pane-head"><span>preview.pdf</span></div>
+    <div class="preview-wrap" id="previewWrap">
+      <div class="empty-state" id="emptyState">
+        <span class="glyph">▤</span>
+        Belum ada hasil.<br/>Tekan "Compile" untuk merender dokumen.
+      </div>
+      <iframe id="pdfFrame" title="Hasil PDF"></iframe>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span class="log-toggle" id="logToggle">tampilkan log kompilasi</span>
+  <div class="actions">
+    <button id="compileBtn" disabled>Compile</button>
+    <button id="downloadBtn">↓ Download PDF</button>
+  </div>
+</footer>
+<div id="logPanel"></div>
+
+<script src="./engine/PdfTeXEngine.js"></script>
+<script src="./script.js"></script>
+</body>
+</html>
